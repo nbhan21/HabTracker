@@ -1,0 +1,14 @@
+# Env (secrets)
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Build / deps
+node_modules/
+dist/
+
+# Optional: DB exports/backups (ignore if you create dumps)
+db/backups/
+*.sql.gz
+*.dump

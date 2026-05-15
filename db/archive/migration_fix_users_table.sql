@@ -1,0 +1,12 @@
+-- ⚠️ DEPRECATED - USE schema_mvp.sql INSTEAD
+-- 
+-- This file is kept for reference only.
+-- For the complete, up-to-date migration, use: db/schema_mvp.sql
+--
+-- To execute the migration:
+-- 1. Go to Supabase SQL Editor
+-- 2. Copy content from db/schema_mvp.sql
+-- 3. Paste and run in Supabase
+-- 4. Follow MIGRATION_GUIDE.md for verification steps
+--
+-- Old migration content below (DEPRECATED):
