@@ -157,11 +157,11 @@ Tambahkan variable berikut di Netlify:
 
 ## Bagian 6: Checklist Setelah Deploy
 
-- [ ] Repo lokal sudah push ke GitHub akun lama.
-- [ ] Repo GitHub yang dipakai benar.
-- [ ] Vercel / Netlify sudah connect ke repo itu.
-- [ ] Environment variables sudah diisi.
-- [ ] Build berhasil.
+- [v] Repo lokal sudah push ke GitHub akun lama.
+- [v] Repo GitHub yang dipakai benar.
+- [v] Vercel / Netlify sudah connect ke repo itu.
+- [v] Environment variables sudah diisi.
+- [v] Build berhasil.
 - [ ] Login berhasil.
 - [ ] Create habit berhasil.
 - [ ] Sync / analytics / streak tampil benar.
