@@ -2,24 +2,17 @@
 
 **Date:** 2026-05-12
 
-This file replaces the previous migration / review documents. It records the current backend shape and the changes performed to disable offline/migration features.
+This file replaces the previous migration / review documents. It records the current backend shape and the changes performed to make Supabase the direct source of truth.
 
 ---
 
 ## What I changed (actions performed)
 
-- Added environment feature flags in `.env.example`:
-  - `VITE_ENABLE_OFFLINE` (default `false`)
-  - `VITE_ENABLE_SYNC_TOOLS` (default `false`)
-  - `VITE_ALLOW_LOCAL_MIGRATION` (default `false`)
-
+- Removed the old offline / migration feature flags from `.env.example` and `.env.production.example`.
 - Updated `src/app/store/HabitContext.tsx`:
-  - Offline persistence (localStorage + IndexedDB snapshot) is now gated by `VITE_ENABLE_OFFLINE`.
-  - When offline is disabled the app will use in-memory initial data only and will not read/write to localStorage or IndexedDB.
-
+  - Tracker mutations now write directly to Supabase instead of relying on offline persistence.
 - Updated `src/app/pages/Manage.tsx`:
-  - Guarded `Push Local to Cloud`, `Import JSON`, and cloud-reset (`Fresh Start`) actions with `VITE_ALLOW_LOCAL_MIGRATION` so migrations do not run unless explicitly enabled.
-  - `Sync & Backup` UI remains hidden unless `VITE_ENABLE_SYNC_TOOLS` is enabled (or in dev).
+  - Removed the migration/testing panel so the page stays focused on normal tracker editing.
 
 - Removed legacy documentation files (per your request):
   - `MIGRATION_GUIDE.md`
@@ -39,18 +32,6 @@ This file replaces the previous migration / review documents. It records the cur
 - Cloud sync: `src/app/services/cloudSync.ts` contains `pushLocalDataToCloud`, `pullCloudDataToLocal`, and `resetCloudDataForUser`.
 
 ---
-
-## How to re-enable offline or migrations (if needed)
-
-1. Set environment variables in your `.env` (or CI):
-
-```
-VITE_ENABLE_OFFLINE=true
-VITE_ENABLE_SYNC_TOOLS=true
-VITE_ALLOW_LOCAL_MIGRATION=true
-```
-
-2. Rebuild the app (Vite) and redeploy.
 
 ---
 

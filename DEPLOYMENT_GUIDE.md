@@ -1,9 +1,9 @@
 # HabTracker - Supabase Production Deployment Guide
 
 ## Overview
-Current state: **Frontend ready (Vite), Database schema ready (SQL), but NOT yet deployed to Supabase production.**
+Current state: **Frontend ready (Vite), Clerk auth integrated, and Supabase is the database/write backend.**
 
-This guide shows exact steps to deploy HabTracker from local dev to Supabase Cloud production.
+This guide shows the exact steps to deploy HabTracker with Clerk + Supabase.
 
 ---
 
@@ -17,18 +17,18 @@ This guide shows exact steps to deploy HabTracker from local dev to Supabase Clo
    - **Database password**: Create strong password (save securely)
    - **Region**: Choose closest to your users
 4. Wait ~2 minutes for project initialization
-5. Copy credentials (you'll need these in Step 3)
+5. Copy credentials (you'll need these in Step 2)
 
-### Step 2: Get Supabase Credentials
+### Step 2: Get Required Credentials
+You need values from two places:
+
+In Clerk dashboard:
+- Copy **Publishable Key** → `VITE_CLERK_PUBLISHABLE_KEY`
+- Copy **Secret Key** → `CLERK_SECRET_KEY`
+
 In Supabase dashboard → **Settings** → **API**:
-- Copy **Project URL** → `VITE_SUPABASE_URL`
-- Copy **anon public key** → `VITE_SUPABASE_ANON_KEY`
-
-Example:
-```
-VITE_SUPABASE_URL=https://xxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
+- Copy **Project URL** → `SUPABASE_URL`
+- Copy **service_role key** → `SUPABASE_SERVICE_ROLE_KEY`
 
 ---
 
@@ -47,7 +47,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 2. Open file: `db/rls_policies.sql`
 3. Copy entire content and paste into SQL editor
 4. Click **"Run"**
-5. Wait for success (should see RLS enabled, policies created, trigger created)
+5. Wait for success (should see RLS enabled and policies created)
 
 **Verification:**
 In Supabase dashboard → **Table Editor**:
@@ -62,17 +62,15 @@ In Supabase dashboard → **Table Editor**:
 ### Step 5: Create Production Environment File
 In project root, create `.env.production`:
 ```
-VITE_SUPABASE_URL=https://xxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-VITE_ENABLE_OFFLINE=false
-VITE_ENABLE_SYNC_TOOLS=false
-VITE_ALLOW_LOCAL_MIGRATION=false
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+SUPABASE_URL=https://xxxxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=service_role_...
 ```
 
 **Important:**
-- `ENABLE_OFFLINE=false`: Don't persist to local storage (cloud-primary)
-- `ENABLE_SYNC_TOOLS=false`: Hide dev migration tools from users
-- `ALLOW_LOCAL_MIGRATION=false`: Prevent accidental local-to-cloud push
+- The frontend only needs `VITE_CLERK_PUBLISHABLE_KEY`.
+- The backend write API needs `CLERK_SECRET_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`.
 
 ---
 
@@ -93,8 +91,10 @@ Choose one option:
 3. Click "Import Project"
 4. Select your HabTracker GitHub repo
 5. Configure Environment Variables:
-   - Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
-   - Add other VITE_* flags from `.env.production`
+   - Add `VITE_CLERK_PUBLISHABLE_KEY`
+   - Add `CLERK_SECRET_KEY`
+   - Add `SUPABASE_URL`
+   - Add `SUPABASE_SERVICE_ROLE_KEY`
 6. Click "Deploy"
 7. Get URL: `https://habtracker-xxxxx.vercel.app`
 
@@ -130,15 +130,13 @@ Choose one option:
 2. **Test signup** with new email:
    - Click "Sign Up"
    - Enter email + password
-   - Should see **no localStorage/IndexedDB** (offline disabled)
-   - Should see **no Sync & Backup panel** (tools hidden)
 3. **Test habit creation**:
    - Create new habit
    - Check today's date
-   - Verify in Supabase → Table Editor → habits table (habit appears with your user_id)
+   - Verify in Supabase → Table Editor → habits table (habit appears with your clerk_user_id)
 4. **Test data isolation**:
    - Login as different user
-   - Verify you don't see first user's habits (RLS working)
+   - Verify you don't see first user's habits
 5. **Test analytics**:
    - Heatmap should show correct dates
    - Streaks should calculate properly
@@ -166,7 +164,7 @@ If something breaks in production:
    - Re-execute `db/rls_policies.sql` if needed
 
 3. **Security breach**:
-   - Rotate VITE_SUPABASE_ANON_KEY in Supabase dashboard
+   - Rotate `CLERK_SECRET_KEY` and `SUPABASE_SERVICE_ROLE_KEY`
    - Update keys in all deployed environments
    - Force users to re-login (invalidate old tokens)
 
@@ -179,19 +177,17 @@ Pre-Deployment:
 ☐ Code committed to git
 ☐ npm run build succeeds (no errors)
 ☐ .env.production created with correct keys
-☐ All VITE_* flags set to production values
 
 Database:
 ☐ Supabase project created
 ☐ schema_mvp.sql executed successfully
 ☐ rls_policies.sql executed successfully
 ☐ Verify 7 tables exist + habit_templates populated
-☐ Verify RLS enabled on all user-owned tables
+☐ Verify RLS enabled on template table and backend can write with service role
 
 Frontend:
 ☐ Frontend deployed to Vercel/Netlify/own host
-☐ VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY set in hosting environment
-☐ All VITE_* feature flags set correctly
+☐ VITE_CLERK_PUBLISHABLE_KEY set in hosting environment
 
 Testing:
 ☐ Access deployed URL in browser
@@ -205,15 +201,11 @@ Testing:
 Go Live:
 ☐ Share URL with beta users
 ☐ Monitor Supabase logs for errors
-☐ Monitor localStorage (should be empty - offline disabled)
 ```
 
 ---
 
 ## FAQ
-
-**Q: What if I want to test with offline mode enabled in production?**  
-A: Set `VITE_ENABLE_OFFLINE=true` in production .env. This will persist to localStorage/IndexedDB but cloud-primary sync still works. Not recommended for production.
 
 **Q: Can I use the same Supabase project for development and production?**  
 A: Not recommended. Create separate projects:
@@ -249,7 +241,7 @@ Total time: ~15-30 minutes to full production deployment! 🚀
 
 Saya menambahkan dua skrip verifikasi dan satu template env di `scripts/` dan root:
 
-- `scripts/verify_db.sh` : Bash script yang menjalankan `db/schema_mvp.sql`, `db/rls_policies.sql` lalu menjalankan query verifikasi.
+- `scripts/verify_db.sh` : Bash script yang menjalankan `db/schema_mvp.sql` lalu `db/rls_policies.sql` dan menjalankan query verifikasi.
 - `scripts/verify_db.ps1` : PowerShell versi yang sama untuk Windows.
 - `.env.production.example` : Template file environment untuk deployment.
 

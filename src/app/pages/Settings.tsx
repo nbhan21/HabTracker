@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../store/AuthContext';
-import { supabase } from '../../lib/supabase';
 import { Save, Loader2, Check, AlertCircle } from 'lucide-react';
 
 export const Settings = () => {
-  const { user, isConfigured } = useAuth();
+  const { user, isConfigured, updateDisplayName } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,29 +29,7 @@ export const Settings = () => {
     try {
       const trimmedName = displayName.trim();
 
-      // Step 1: Update display name in auth user metadata
-      const { error: authError } = await supabase?.auth.updateUser({
-        data: { display_name: trimmedName },
-      }) || {};
-
-      if (authError) {
-        throw new Error(`Auth update failed: ${authError.message}`);
-      }
-
-      // Step 2: Sync to database users table
-      // This is non-critical - if it fails, auth is still updated
-      const { error: dbError } = await supabase
-        ?.from('users')
-        .update({ 
-          display_name: trimmedName, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', user.id) || {};
-
-      // Log db error but don't fail - auth metadata is primary source
-      if (dbError) {
-        console.warn('Database sync warning (non-critical):', dbError);
-      }
+      await updateDisplayName(trimmedName);
 
       setMessage({ 
         type: 'success', 
@@ -73,7 +50,7 @@ export const Settings = () => {
         <div>
           <h1 className="text-[32px] font-[700] tracking-[-0.02em] text-[#0b1c30] dark:text-white mb-2">Settings</h1>
           <p className="text-[14px] text-[#737686] dark:text-[#8b949e]">
-            Supabase not configured. Settings are only available when logged in.
+            Clerk not configured. Settings are only available when logged in.
           </p>
         </div>
       </div>

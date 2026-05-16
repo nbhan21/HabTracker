@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router';
-import { LayoutDashboard, BarChart2, BookOpen, Settings as SettingsIcon, Sun, Moon, Menu, X, LogOut, Loader2, Check, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, BarChart2, BookOpen, Settings as SettingsIcon, Sun, Moon, Menu, X, Loader2, AlertCircle } from 'lucide-react';
 import { HabitProvider } from '../store/HabitContext';
 import { useAuth } from '../store/AuthContext';
 import { useAutoSync } from '../hooks/useAutoSync';
+import { Show, UserButton } from '@clerk/react';
 
 // Separate SyncStatus component to prevent unnecessary re-renders of entire Root
 const SyncStatus = React.memo(() => {
@@ -29,24 +30,12 @@ const SyncStatus = React.memo(() => {
 });
 
 const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (v: boolean) => void }) => {
-  const { user, signOut, isConfigured, loading: authLoading } = useAuth();
+  const { user, isConfigured } = useAuth();
   const [isDark, setIsDark] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
     document.documentElement.classList.toggle('dark');
-  };
-
-  const handleSignOut = async () => {
-    setSigningOut(true);
-    try {
-      await signOut();
-    } catch (err) {
-      console.error('Sign out error:', err);
-    } finally {
-      setSigningOut(false);
-    }
   };
 
   const navItems = [
@@ -82,22 +71,24 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (v: boolea
       </div>
       
       <div className="px-6 pb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#e5eeff] dark:bg-[#004ac6]/20 flex items-center justify-center text-[#004ac6] dark:text-[#a5c0ff] font-bold text-sm">
-            {user?.email?.[0].toUpperCase() ?? 'A'}
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[14px] font-[600] text-[#0b1c30] dark:text-white truncate">
-              {user?.displayName || user?.email || 'User'}
-            </span>
-            {user?.email && (
-              <span className="text-[11px] text-[#737686] dark:text-[#8b949e] truncate">
-                {user.email}
+        <Show when="signed-in" fallback={null}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-[#e5eeff] dark:bg-[#004ac6]/20 flex items-center justify-center text-[#004ac6] dark:text-[#a5c0ff] font-bold text-sm">
+              {user?.email?.[0].toUpperCase() ?? 'A'}
+            </div>
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-[14px] font-[600] text-[#0b1c30] dark:text-white truncate">
+                {user?.displayName || user?.email || 'User'}
               </span>
-            )}
+              {user?.email && (
+                <span className="text-[11px] text-[#737686] dark:text-[#8b949e] truncate">
+                  {user.email}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-        {isConfigured && user && <SyncStatus />}
+          {isConfigured && user && <SyncStatus />}
+        </Show>
       </div>
 
       <nav className="flex-1 px-4 space-y-2">
@@ -136,21 +127,11 @@ const Sidebar = ({ isOpen, setIsOpen }: { isOpen: boolean, setIsOpen: (v: boolea
           <span className="text-[12px]">{isDark ? 'Light' : 'Dark'}</span>
         </button>
         
-        {isConfigured && user && (
-          <button 
-            onClick={handleSignOut}
-            disabled={signingOut || authLoading}
-            className="w-full flex items-center justify-center gap-2 p-2 text-[#ba1a1a] dark:text-[#ffb4ab] hover:bg-[#ffdad6] dark:hover:bg-[#93000a] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Sign out"
-          >
-            {signingOut ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <LogOut className="w-4 h-4" />
-            )}
-            <span className="text-[12px]">{signingOut ? 'Signing out...' : 'Sign Out'}</span>
-          </button>
-        )}
+        <Show when="signed-in" fallback={null}>
+          <div className="flex justify-center">
+            <UserButton />
+          </div>
+        </Show>
       </div>
     </aside>
     </>

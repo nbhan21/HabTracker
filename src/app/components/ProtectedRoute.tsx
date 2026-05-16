@@ -17,13 +17,7 @@ export const ProtectedRoute = () => {
     );
   }
 
-  // If Supabase not configured, allow access to continue with localStorage only
-  if (!isConfigured) {
-    return <Outlet />;
-  }
-
-  // If Supabase is configured but user not authenticated, redirect to login
-  if (!user) {
+  if (!isConfigured || !user) {
     return <Navigate to="/login" replace />;
   }
 

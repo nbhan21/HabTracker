@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { supabase } from '../../lib/supabase';
+import React, { createContext, useContext, useMemo, useState, ReactNode } from 'react';
+import { useAuth as useClerkAuth, useUser } from '@clerk/react';
 
 export interface AuthUser {
   id: string;
@@ -11,92 +11,47 @@ interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   error: string | null;
-  signInWithMagicLink: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
+  getToken: () => Promise<string | null>;
   isConfigured: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { isLoaded, signOut: clerkSignOut, getToken } = useClerkAuth();
+  const { user: clerkUser } = useUser();
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isConfigured = Boolean(supabase);
+  const isConfigured = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
-  // Check current session on mount and listen for auth changes
-  useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
+  const user = useMemo<AuthUser | null>(() => {
+    if (!clerkUser) return null;
 
-    const client = supabase;
+    const email = clerkUser.primaryEmailAddress?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress || '';
+    const metadataDisplayName = (clerkUser.unsafeMetadata as Record<string, unknown> | undefined)?.displayName;
+    const displayName =
+      typeof metadataDisplayName === 'string' && metadataDisplayName.trim()
+        ? metadataDisplayName
+        : clerkUser.fullName || [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || undefined;
 
-    const initializeAuth = async () => {
-      try {
-        const {
-          data: { session },
-          error: sessionError,
-        } = await client.auth.getSession();
-
-        if (sessionError) throw sessionError;
-
-        if (session?.user) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            displayName: session.user.user_metadata?.display_name || session.user.user_metadata?.name,
-          });
-        }
-      } catch (err) {
-        console.error('Auth init error:', err);
-        setError(err instanceof Error ? err.message : 'Auth error');
-      } finally {
-        setLoading(false);
-      }
+    return {
+      id: clerkUser.id,
+      email,
+      displayName,
     };
+  }, [clerkUser]);
 
-    initializeAuth();
-
-    // Listen for auth state changes
-    const {
-      data: { subscription },
-    } = client.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          displayName: session.user.user_metadata?.display_name || session.user.user_metadata?.name,
-        });
-      } else {
-        setUser(null);
-      }
-    });
-
-    return () => {
-      subscription?.unsubscribe();
-    };
-  }, []);
-
-  const signInWithMagicLink = async (email: string) => {
-    if (!supabase) throw new Error('Supabase not configured');
-
+  const signOut = async () => {
     setError(null);
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-
-      if (error) throw error;
+      await clerkSignOut({ redirectUrl: '/' });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to send magic link';
+      const message = err instanceof Error ? err.message : 'Failed to sign out';
       setError(message);
       throw err;
     } finally {
@@ -104,18 +59,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const signOut = async () => {
-    if (!supabase) return;
+  const updateDisplayName = async (displayName: string) => {
+    if (!clerkUser) {
+      throw new Error('No authenticated user');
+    }
 
     setError(null);
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      setUser(null);
+      const existingMetadata = (clerkUser.unsafeMetadata as Record<string, unknown> | undefined) || {};
+      await clerkUser.update({
+        unsafeMetadata: {
+          ...existingMetadata,
+          displayName,
+        },
+      });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to sign out';
+      const message = err instanceof Error ? err.message : 'Failed to update profile';
       setError(message);
       throw err;
     } finally {
@@ -127,10 +88,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     <AuthContext.Provider
       value={{
         user,
-        loading,
+        loading: !isLoaded || loading,
         error,
-        signInWithMagicLink,
         signOut,
+        updateDisplayName,
+        getToken,
         isConfigured,
       }}
     >

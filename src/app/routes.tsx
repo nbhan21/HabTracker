@@ -4,7 +4,6 @@ import { Dashboard } from "./pages/Dashboard";
 import { lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { Login } from "./pages/Login";
-import { AuthCallback } from "./pages/AuthCallback";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 // Lazy load pages that aren't critical for initial load
@@ -28,8 +27,12 @@ export const router = createBrowserRouter([
     Component: Login,
   },
   {
-    path: "/auth/callback",
-    Component: AuthCallback,
+    path: "/sign-in",
+    Component: Login,
+  },
+  {
+    path: "/sign-up",
+    Component: Login,
   },
   {
     path: "/",

@@ -1,5 +1,5 @@
 -- DB Schema MVP for Habits & Productivity Tracker
--- Date: 2026-05-08 (Updated with proper auth.users FK and RLS policies)
+-- Date: 2026-05-08 (final Clerk-native schema for fresh Supabase projects)
 -- Notes: This schema uses date-only for completions (column `date`), per your preference.
 
 -- Enable uuid generation (Postgres with pgcrypto or pguuid extension)
@@ -11,25 +11,33 @@ create extension if not exists pgcrypto;
 -- Ensure we're operating in the public schema (helps when running from Supabase SQL editor)
 set search_path = public;
 
+-- Drop any previous attempt of the schema so this file works on a reused empty project.
+-- No data needs to be preserved for this setup.
+drop table if exists public.weekly_reviews cascade;
+drop table if exists public.habit_completions cascade;
+drop table if exists public.daily_tasks cascade;
+drop table if exists public.books cascade;
+drop table if exists public.habits cascade;
+drop table if exists public.habit_templates cascade;
+drop table if exists public.users cascade;
+
 -- =====================================================
--- USERS TABLE - References auth.users for proper sync
+-- USERS TABLE - Clerk ownership
 -- =====================================================
 CREATE TABLE IF NOT EXISTS users (
-  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  clerk_user_id text PRIMARY KEY,
   email text UNIQUE NOT NULL,
   display_name text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
 
--- Note: Trigger handle_new_user() is defined in rls_policies.sql
-
 -- =====================================================
 -- HABITS TABLE
 -- =====================================================
 CREATE TABLE IF NOT EXISTS habits (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  clerk_user_id text NOT NULL REFERENCES users(clerk_user_id) ON DELETE CASCADE,
   legacy_local_id text,
   name text NOT NULL CHECK (length(trim(name)) > 0),
   category text NOT NULL DEFAULT '',
@@ -40,44 +48,44 @@ CREATE TABLE IF NOT EXISTS habits (
   updated_at timestamptz DEFAULT now(),
   deleted_at timestamptz
 );
-CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_habits_user_legacy_local_id ON habits(user_id, legacy_local_id) WHERE legacy_local_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_habits_clerk_user ON habits(clerk_user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_habits_clerk_user_legacy_local_id ON habits(clerk_user_id, legacy_local_id) WHERE legacy_local_id IS NOT NULL;
 
 -- =====================================================
 -- HABIT COMPLETIONS TABLE
 -- =====================================================
 CREATE TABLE IF NOT EXISTS habit_completions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  clerk_user_id text NOT NULL REFERENCES users(clerk_user_id) ON DELETE CASCADE,
   habit_id uuid NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
   date date NOT NULL,
   source text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_habit_user_date ON habit_completions(user_id, habit_id, date);
-CREATE INDEX IF NOT EXISTS idx_habit_completions_user_date ON habit_completions(user_id, date);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_habit_clerk_user_date ON habit_completions(clerk_user_id, habit_id, date);
+CREATE INDEX IF NOT EXISTS idx_habit_completions_clerk_user_date ON habit_completions(clerk_user_id, date);
 
 -- =====================================================
 -- DAILY TASKS TABLE
 -- =====================================================
 CREATE TABLE IF NOT EXISTS daily_tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  clerk_user_id text NOT NULL REFERENCES users(clerk_user_id) ON DELETE CASCADE,
   legacy_local_id text,
   name text NOT NULL CHECK (length(trim(name)) > 0),
   completed boolean NOT NULL DEFAULT false,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_tasks_user_legacy_local_id ON daily_tasks(user_id, legacy_local_id) WHERE legacy_local_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_tasks_clerk_user_legacy_local_id ON daily_tasks(clerk_user_id, legacy_local_id) WHERE legacy_local_id IS NOT NULL;
 
 -- =====================================================
 -- BOOKS TABLE
 -- =====================================================
 CREATE TABLE IF NOT EXISTS books (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  clerk_user_id text NOT NULL REFERENCES users(clerk_user_id) ON DELETE CASCADE,
   legacy_local_id text,
   title text NOT NULL CHECK (length(trim(title)) > 0),
   current_page int NOT NULL DEFAULT 0 CHECK (current_page >= 0),
@@ -85,7 +93,7 @@ CREATE TABLE IF NOT EXISTS books (
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_books_user_legacy_local_id ON books(user_id, legacy_local_id) WHERE legacy_local_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_books_clerk_user_legacy_local_id ON books(clerk_user_id, legacy_local_id) WHERE legacy_local_id IS NOT NULL;
 
 -- =====================================================
 -- HABIT TEMPLATES TABLE (Global, read-only reference)
@@ -114,12 +122,12 @@ ON CONFLICT DO NOTHING;
 -- =====================================================
 CREATE TABLE IF NOT EXISTS weekly_reviews (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  clerk_user_id text NOT NULL REFERENCES users(clerk_user_id) ON DELETE CASCADE,
   week_key text NOT NULL,
   snapshot jsonb NOT NULL,
   created_at timestamptz DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_weekly_reviews_user_week ON weekly_reviews(user_id, week_key);
+CREATE INDEX IF NOT EXISTS idx_weekly_reviews_clerk_user_week ON weekly_reviews(clerk_user_id, week_key);
 
 -- =====================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
@@ -142,8 +150,8 @@ CREATE INDEX IF NOT EXISTS idx_weekly_reviews_user_week ON weekly_reviews(user_i
 -- =====================================================
 -- Run these queries to verify everything is working:
 -- SELECT * FROM users;
--- SELECT * FROM habits WHERE user_id = '<your-user-id>';
--- SELECT * FROM habit_completions WHERE user_id = '<your-user-id>';
+-- SELECT * FROM habits WHERE clerk_user_id = '<your-clerk-user-id>';
+-- SELECT * FROM habit_completions WHERE clerk_user_id = '<your-clerk-user-id>';
 -- SELECT * FROM habit_templates;
 
 -- Simple query ideas:
@@ -153,7 +161,7 @@ CREATE INDEX IF NOT EXISTS idx_weekly_reviews_user_week ON weekly_reviews(user_i
 --   count(*) as completed_days,
 --   (count(*)::float / :days_in_week) * 100 as pct
 -- from habit_completions hc
--- where hc.user_id = :user_id
+-- where hc.clerk_user_id = :clerk_user_id
 --   and hc.date between :start_date and :end_date
 -- group by hc.habit_id
 -- order by pct desc;
@@ -161,7 +169,7 @@ CREATE INDEX IF NOT EXISTS idx_weekly_reviews_user_week ON weekly_reviews(user_i
 -- 2) Strongest habit this week (most completions)
 -- select habit_id, count(*) as c
 -- from habit_completions
--- where user_id = :user_id and date between :start_date and :end_date
+-- where clerk_user_id = :clerk_user_id and date between :start_date and :end_date
 -- group by habit_id order by c desc limit 1;
 
 -- 3) Basic streak calculation idea (client-side recommended):

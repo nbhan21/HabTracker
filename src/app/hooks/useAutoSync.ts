@@ -7,7 +7,7 @@ import { pullCloudDataToLocal } from '../services/cloudSync';
 const SYNC_TIMEOUT_MS = 15000;
 
 export const useAutoSync = () => {
-  const { user, isConfigured } = useAuth();
+  const { user, isConfigured, getToken } = useAuth();
   const { replaceState } = useHabits();
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export const useAutoSync = () => {
       }, SYNC_TIMEOUT_MS);
 
       try {
-        const cloudData = await pullCloudDataToLocal(user.id);
+        const cloudData = await pullCloudDataToLocal(getToken);
 
         if (cancelled) return;
 
@@ -77,7 +77,7 @@ export const useAutoSync = () => {
       cancelled = true;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [user?.id, isConfigured, replaceState]);
+  }, [user?.id, isConfigured, replaceState, getToken]);
 
   return { isSyncing, syncError };
 };

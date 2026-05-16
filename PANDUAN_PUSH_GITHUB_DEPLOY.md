@@ -115,9 +115,6 @@ git push -u origin main
 Tambahkan variable berikut di Vercel:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_ENABLE_OFFLINE=false`
-- `VITE_ENABLE_SYNC_TOOLS=false`
-- `VITE_ALLOW_LOCAL_MIGRATION=false`
 
 ### Langkah 13 - Deploy
 - Klik `Deploy`.
@@ -144,9 +141,6 @@ Gunakan setting berikut:
 Tambahkan variable berikut di Netlify:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_ENABLE_OFFLINE=false`
-- `VITE_ENABLE_SYNC_TOOLS=false`
-- `VITE_ALLOW_LOCAL_MIGRATION=false`
 
 ### Langkah 14 - Deploy
 - Klik `Deploy site`.

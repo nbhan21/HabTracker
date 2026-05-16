@@ -1,7 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { loadOfflineSnapshot, saveOfflineSnapshot } from '../services/offlineStore';
-
-const ENABLE_OFFLINE = import.meta.env.VITE_ENABLE_OFFLINE === 'true';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import { useAuth } from './AuthContext';
+import { pushLocalDataToCloud } from '../services/cloudSync';
 
 export type Priority = 'Low' | 'Medium' | 'High';
 
@@ -57,7 +56,6 @@ interface HabitContextType {
 }
 
 const HabitContext = createContext<HabitContextType | undefined>(undefined);
-const STORAGE_KEY = 'habtracker-state-v1';
 const WEEKLY_GRACE_DAYS = 1;
 
 const toDateKey = (date: Date) => {
@@ -204,113 +202,54 @@ const initialDailyTasks: DailyTask[] = [];
 const initialBooks: Book[] = [];
 
 export const HabitProvider = ({ children }: { children: ReactNode }) => {
-  const [hydrated, setHydrated] = useState(false);
+  const { isConfigured, user, getToken } = useAuth();
+  const [habits, setHabits] = useState<Habit[]>(initialHabits.map(normalizeHabit));
+  const [dailyTasks, setDailyTasks] = useState<DailyTask[]>(initialDailyTasks);
+  const [books, setBooks] = useState<Book[]>(initialBooks);
 
-  const [habits, setHabits] = useState<Habit[]>(() => {
-    if (typeof window === 'undefined') return initialHabits.map(normalizeHabit);
-    if (!ENABLE_OFFLINE) return initialHabits.map(normalizeHabit);
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return initialHabits.map(normalizeHabit);
+  const syncCloudState = useCallback(
+    (nextHabits: Habit[], nextDailyTasks: DailyTask[], nextBooks: Book[]) => {
+      if (!isConfigured || !user) return;
 
-    try {
-      const parsed = JSON.parse(raw) as { habits?: Habit[] };
-      return (parsed.habits ?? initialHabits).map(normalizeHabit);
-    } catch {
-      return initialHabits.map(normalizeHabit);
-    }
-  });
-
-  const [dailyTasks, setDailyTasks] = useState<DailyTask[]>(() => {
-    if (typeof window === 'undefined') return initialDailyTasks;
-    if (!ENABLE_OFFLINE) return initialDailyTasks;
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return initialDailyTasks;
-
-    try {
-      const parsed = JSON.parse(raw) as { dailyTasks?: DailyTask[] };
-      return parsed.dailyTasks ?? initialDailyTasks;
-    } catch {
-      return initialDailyTasks;
-    }
-  });
-
-  const [books, setBooks] = useState<Book[]>(() => {
-    if (typeof window === 'undefined') return initialBooks;
-    if (!ENABLE_OFFLINE) return initialBooks;
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return initialBooks;
-
-    try {
-      const parsed = JSON.parse(raw) as { books?: Book[] };
-      return parsed.books ?? initialBooks;
-    } catch {
-      return initialBooks;
-    }
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    if (!ENABLE_OFFLINE) {
-      setHydrated(true);
-      return;
-    }
-
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      setHydrated(true);
-      return;
-    }
-
-    const hydrateFromIndexedDb = async () => {
-      try {
-        const snapshot = await loadOfflineSnapshot();
-        if (snapshot) {
-          setHabits(snapshot.habits.map(normalizeHabit));
-          setDailyTasks(snapshot.dailyTasks);
-          setBooks(snapshot.books);
-        }
-      } catch (err) {
-        console.error('Failed to hydrate from IndexedDB snapshot:', err);
-      } finally {
-        setHydrated(true);
-      }
-    };
-
-    hydrateFromIndexedDb();
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!hydrated) return;
-    if (!ENABLE_OFFLINE) return;
-
-    const snapshot = { habits, dailyTasks, books };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-
-    saveOfflineSnapshot({
-      ...snapshot,
-      updatedAt: new Date().toISOString(),
-    }).catch((err) => {
-      console.error('Failed to persist IndexedDB snapshot:', err);
-    });
-  }, [habits, dailyTasks, books, hydrated]);
+      void pushLocalDataToCloud(getToken, {
+        habits: nextHabits,
+        dailyTasks: nextDailyTasks,
+        books: nextBooks,
+      }).catch((error) => {
+        console.error('cloud sync error:', error);
+      });
+    },
+    [getToken, isConfigured, user],
+  );
 
   const toggleHabit = (id: string, date: string) => {
-    setHabits(prev => prev.map(habit => {
-      if (habit.id === id) {
+    setHabits((prev) => {
+      const nextHabit = prev.find((habit) => habit.id === id);
+      const next = prev.map((habit) => {
+        if (habit.id !== id) return habit;
+
         const hasCompleted = habit.completedDates.includes(date);
-        const newDates = hasCompleted 
-          ? habit.completedDates.filter(d => d !== date)
+        const nextDates = hasCompleted
+          ? habit.completedDates.filter((item) => item !== date)
           : [...habit.completedDates, date];
-        return normalizeHabit({ ...habit, completedDates: newDates });
+        return normalizeHabit({ ...habit, completedDates: nextDates });
+      });
+
+      if (nextHabit) {
+        syncCloudState(next, dailyTasks, books);
       }
-      return habit;
-    }));
+
+      return next;
+    });
   };
 
   const toggleDailyTask = (id: string) => {
-    setDailyTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+    setDailyTasks((prev) => {
+      const next = prev.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task));
+      syncCloudState(habits, next, books);
+
+      return next;
+    });
   };
 
   const addHabit = (habit: Omit<Habit, 'id' | 'completedDates' | 'longestStreak' | 'currentStreak'>) => {
@@ -321,7 +260,11 @@ export const HabitProvider = ({ children }: { children: ReactNode }) => {
       longestStreak: 0,
       currentStreak: 0,
     });
-    setHabits(prev => [...prev, newHabit]);
+    setHabits((prev) => {
+      const next = [...prev, newHabit];
+      syncCloudState(next, dailyTasks, books);
+      return next;
+    });
   };
 
   const addHabitFromTemplate = (templateId: string) => {
@@ -336,27 +279,54 @@ export const HabitProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteHabit = (id: string) => {
-    setHabits(prev => prev.filter(h => h.id !== id));
+    setHabits((prev) => {
+      const next = prev.filter((habit) => habit.id !== id);
+      syncCloudState(next, dailyTasks, books);
+      return next;
+    });
   };
 
   const addDailyTask = (taskName: string) => {
-    setDailyTasks(prev => [...prev, { id: Math.random().toString(), name: taskName, completed: false }]);
+    const newTask = { id: Math.random().toString(), name: taskName, completed: false };
+    setDailyTasks((prev) => {
+      const next = [...prev, newTask];
+      syncCloudState(habits, next, books);
+      return next;
+    });
   };
 
   const deleteDailyTask = (id: string) => {
-    setDailyTasks(prev => prev.filter(t => t.id !== id));
+    setDailyTasks((prev) => {
+      const next = prev.filter((task) => task.id !== id);
+      syncCloudState(habits, next, books);
+      return next;
+    });
   };
 
   const updateBookProgress = (id: string, currentPage: number) => {
-    setBooks(books.map(b => b.id === id ? { ...b, currentPage } : b));
+    setBooks((prev) => {
+      const next = prev.map((book) => (book.id === id ? { ...book, currentPage } : book));
+      syncCloudState(habits, dailyTasks, next);
+
+      return next;
+    });
   };
 
   const addBook = (book: Omit<Book, 'id'>) => {
-    setBooks(prev => [...prev, { ...book, id: Math.random().toString() }]);
+    const newBook = { ...book, id: Math.random().toString() };
+    setBooks((prev) => {
+      const next = [...prev, newBook];
+      syncCloudState(habits, dailyTasks, next);
+      return next;
+    });
   };
 
   const deleteBook = (id: string) => {
-    setBooks(prev => prev.filter(b => b.id !== id));
+    setBooks((prev) => {
+      const next = prev.filter((book) => book.id !== id);
+      syncCloudState(habits, dailyTasks, next);
+      return next;
+    });
   };
 
   const replaceState = useCallback((data: { habits: Habit[]; dailyTasks: DailyTask[]; books: Book[] }) => {
