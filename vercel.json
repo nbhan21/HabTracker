@@ -1,8 +1,11 @@
 {
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/@vite/:path*", "destination": "/@vite/:path*" },
+    { "source": "/@react-refresh", "destination": "/@react-refresh" },
+    { "source": "/@id/:path*", "destination": "/@id/:path*" },
+    { "source": "/@fs/:path*", "destination": "/@fs/:path*" },
+    { "source": "/src/:path*", "destination": "/src/:path*" },
+    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/:path*", "destination": "/index.html" }
   ]
 }

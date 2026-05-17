@@ -23,12 +23,7 @@ export const useAutoSync = () => {
       return;
     }
 
-    if (syncedUserIdRef.current === user.id) {
-      return;
-    }
-
     let cancelled = false;
-    syncedUserIdRef.current = user.id;
 
     const performSync = async () => {
       setIsSyncing(true);
@@ -55,6 +50,8 @@ export const useAutoSync = () => {
           dailyTasks: cloudData.dailyTasks,
           books: cloudData.books,
         });
+
+        syncedUserIdRef.current = user.id;
 
         console.log('✓ Auto-sync completed on login');
       } catch (err) {

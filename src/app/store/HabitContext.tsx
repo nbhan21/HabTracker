@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { pushLocalDataToCloud } from '../services/cloudSync';
 
@@ -206,20 +206,41 @@ export const HabitProvider = ({ children }: { children: ReactNode }) => {
   const [habits, setHabits] = useState<Habit[]>(initialHabits.map(normalizeHabit));
   const [dailyTasks, setDailyTasks] = useState<DailyTask[]>(initialDailyTasks);
   const [books, setBooks] = useState<Book[]>(initialBooks);
+  const syncStateRef = useRef<{
+    inFlight: boolean;
+    pending: { habits: Habit[]; dailyTasks: DailyTask[]; books: Book[] } | null;
+  }>({ inFlight: false, pending: null });
+
+  const processSyncQueue = useCallback(async () => {
+    if (syncStateRef.current.inFlight) return;
+
+    syncStateRef.current.inFlight = true;
+    try {
+      while (syncStateRef.current.pending) {
+        const snapshot = syncStateRef.current.pending;
+        syncStateRef.current.pending = null;
+        await pushLocalDataToCloud(getToken, snapshot);
+      }
+    } catch (error) {
+      console.error('cloud sync error:', error);
+    } finally {
+      syncStateRef.current.inFlight = false;
+    }
+  }, [getToken]);
 
   const syncCloudState = useCallback(
     (nextHabits: Habit[], nextDailyTasks: DailyTask[], nextBooks: Book[]) => {
       if (!isConfigured || !user) return;
 
-      void pushLocalDataToCloud(getToken, {
+      syncStateRef.current.pending = {
         habits: nextHabits,
         dailyTasks: nextDailyTasks,
         books: nextBooks,
-      }).catch((error) => {
-        console.error('cloud sync error:', error);
-      });
+      };
+
+      void processSyncQueue();
     },
-    [getToken, isConfigured, user],
+    [isConfigured, user, processSyncQueue],
   );
 
   const toggleHabit = (id: string, date: string) => {

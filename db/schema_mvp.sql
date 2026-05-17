@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS habits (
   deleted_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS idx_habits_clerk_user ON habits(clerk_user_id);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_habits_clerk_user_legacy_local_id ON habits(clerk_user_id, legacy_local_id) WHERE legacy_local_id IS NOT NULL;
+DROP INDEX IF EXISTS ux_habits_clerk_user_legacy_local_id;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_habits_clerk_user_legacy_local_id ON habits(clerk_user_id, legacy_local_id);
 
 -- =====================================================
 -- HABIT COMPLETIONS TABLE
@@ -78,7 +79,8 @@ CREATE TABLE IF NOT EXISTS daily_tasks (
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_tasks_clerk_user_legacy_local_id ON daily_tasks(clerk_user_id, legacy_local_id) WHERE legacy_local_id IS NOT NULL;
+DROP INDEX IF EXISTS ux_daily_tasks_clerk_user_legacy_local_id;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_daily_tasks_clerk_user_legacy_local_id ON daily_tasks(clerk_user_id, legacy_local_id);
 
 -- =====================================================
 -- BOOKS TABLE
@@ -93,7 +95,8 @@ CREATE TABLE IF NOT EXISTS books (
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_books_clerk_user_legacy_local_id ON books(clerk_user_id, legacy_local_id) WHERE legacy_local_id IS NOT NULL;
+DROP INDEX IF EXISTS ux_books_clerk_user_legacy_local_id;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_books_clerk_user_legacy_local_id ON books(clerk_user_id, legacy_local_id);
 
 -- =====================================================
 -- HABIT TEMPLATES TABLE (Global, read-only reference)
